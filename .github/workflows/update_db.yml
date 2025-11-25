@@ -1,0 +1,193 @@
+name: Build GTFS Database
+
+on:
+  # Esecuzione automatica ogni giorno alle 04:00 UTC (05:00/06:00 ora italiana)
+  schedule:
+    - cron: '0 4 * * *'
+  
+  # Permette esecuzione manuale dal tab Actions
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write  # Necessario per creare release
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install pandas requests
+      
+      - name: Get current date
+        id: date
+        run: |
+          echo "BUILD_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+          echo "BUILD_TIMESTAMP=$(date +'%Y%m%d_%H%M%S')" >> $GITHUB_ENV
+      
+      - name: Build Database
+        run: |
+          python scripts/build_db.py
+      
+      - name: Check if database changed
+        id: check_changes
+        run: |
+          # Calcola hash del nuovo database
+          NEW_HASH=$(md5sum output/rome_gtfs.db | cut -d' ' -f1)
+          echo "new_hash=$NEW_HASH" >> $GITHUB_OUTPUT
+          
+          # Scarica manifest precedente (se esiste)
+          OLD_HASH=""
+          if curl -f -s -o old_manifest.json \
+            "https://github.com/${{ github.repository }}/releases/download/latest-db/manifest.json"; then
+            OLD_HASH=$(jq -r '.hash' old_manifest.json)
+            echo "Hash precedente: $OLD_HASH"
+          else
+            echo "Nessun database precedente trovato"
+          fi
+          
+          # Confronta hash
+          if [ "$NEW_HASH" != "$OLD_HASH" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✓ Database cambiato, procedo con release"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "✓ Database identico, skip release"
+          fi
+      
+      - name: Compress Database
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          cd output
+          gzip -k rome_gtfs.db
+          
+          # Mostra dimensioni
+          echo "Database originale: $(du -h rome_gtfs.db | cut -f1)"
+          echo "Database compresso: $(du -h rome_gtfs.db.gz | cut -f1)"
+      
+      - name: Update manifest with correct URL
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          # Aggiorna URL nel manifest.json
+          REPO_URL="https://github.com/${{ github.repository }}"
+          jq --arg url "$REPO_URL/releases/download/db-${{ env.BUILD_DATE }}/rome_gtfs.db.gz" \
+             '.download_url = $url' output/manifest.json > output/manifest_updated.json
+          mv output/manifest_updated.json output/manifest.json
+          
+          echo "Manifest aggiornato:"
+          cat output/manifest.json
+      
+      - name: Create dated release
+        if: steps.check_changes.outputs.changed == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            output/rome_gtfs.db.gz
+            output/manifest.json
+          tag_name: db-${{ env.BUILD_DATE }}
+          name: 📦 GTFS Database - ${{ env.BUILD_DATE }}
+          body: |
+            ## 🚍 Database GTFS Roma Mobilità
+            
+            **Data build:** ${{ env.BUILD_DATE }}
+            **Hash MD5:** `${{ steps.check_changes.outputs.new_hash }}`
+            
+            ### 📥 Download
+            - **Database compresso:** `rome_gtfs.db.gz` (~10-15 MB)
+            - **Metadata:** `manifest.json` (info versione e hash)
+            
+            ### 📊 Contenuto
+            Database SQLite pre-indicizzato contenente:
+            - Fermate (stops)
+            - Linee (routes)
+            - Percorsi (trips)
+            - Orari (stop_times)
+            - Calendari (calendar, calendar_dates)
+            - Tracciati geografici (shapes)
+            
+            ### 🔧 Utilizzo
+            ```bash
+            # Scarica e decomprimi
+            wget https://github.com/${{ github.repository }}/releases/download/db-${{ env.BUILD_DATE }}/rome_gtfs.db.gz
+            gunzip rome_gtfs.db.gz
+            
+            # Usa con SQLite
+            sqlite3 rome_gtfs.db "SELECT * FROM routes LIMIT 5;"
+            ```
+            
+            ---
+            *Generato automaticamente da GitHub Actions*
+          prerelease: false
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Update latest tag
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          # Mantieni sempre un tag 'latest-db' per facile accesso
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          
+          # Crea/aggiorna tag latest
+          git tag -f latest-db
+          git push origin latest-db --force
+      
+      - name: Create latest release (moving tag)
+        if: steps.check_changes.outputs.changed == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            output/rome_gtfs.db.gz
+            output/manifest.json
+          tag_name: latest-db
+          name: 📦 Latest GTFS Database
+          body: |
+            ## 🚍 Ultima Versione Database GTFS
+            
+            Questo è sempre l'ultimo database generato.
+            
+            **Ultimo aggiornamento:** ${{ env.BUILD_DATE }}
+            **Hash MD5:** `${{ steps.check_changes.outputs.new_hash }}`
+            
+            ### 🔗 Link Stabili
+            Usa questi URL nell'app per scaricare sempre l'ultima versione:
+            - Database: `https://github.com/${{ github.repository }}/releases/download/latest-db/rome_gtfs.db.gz`
+            - Manifest: `https://github.com/${{ github.repository }}/releases/download/latest-db/manifest.json`
+            
+            ---
+            *Aggiornato automaticamente ogni giorno alle 04:00 UTC*
+          prerelease: false
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Summary
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          echo "## ✅ Build Completata" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Data:** ${{ env.BUILD_DATE }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Hash:** \`${{ steps.check_changes.outputs.new_hash }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Release create:" >> $GITHUB_STEP_SUMMARY
+          echo "- [db-${{ env.BUILD_DATE }}](https://github.com/${{ github.repository }}/releases/tag/db-${{ env.BUILD_DATE }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [latest-db](https://github.com/${{ github.repository }}/releases/tag/latest-db)" >> $GITHUB_STEP_SUMMARY
+      
+      - name: No changes detected
+        if: steps.check_changes.outputs.changed == 'false'
+        run: |
+          echo "## ℹ️ Nessun Cambiamento" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Il database GTFS non è cambiato rispetto alla versione precedente." >> $GITHUB_STEP_SUMMARY
+          echo "Nessuna nuova release creata." >> $GITHUB_STEP_SUMMARY

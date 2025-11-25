@@ -1,0 +1,29 @@
+# Output directory per database generati
+rome_gtfs.db
+rome_gtfs.db.gz
+manifest.json
+
+# File temporanei
+gtfs.zip
+temp_gtfs/
+old_manifest.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
