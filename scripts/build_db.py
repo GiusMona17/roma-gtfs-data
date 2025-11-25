@@ -34,7 +34,7 @@ def download_and_extract():
     
     try:
         print(f"Scaricamento da: {GTFS_URL}")
-        response = requests.get(GTFS_URL, timeout=3000)
+        response = requests.get(GTFS_URL, timeout=60)
         response.raise_for_status()
         
         with open("gtfs.zip", "wb") as f:
@@ -75,22 +75,153 @@ def create_database():
     
     print(f"\nCreazione database: {db_path}")
     conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
     
-    # Mappa file CSV -> nome tabella
-    # IMPORTANTE: Le colonne nel DB avranno gli stessi nomi degli header CSV
-    files_to_import = {
-        "stops": "stops.txt",
-        "routes": "routes.txt",
-        "trips": "trips.txt",
-        "stop_times": "stop_times.txt",
-        "calendar": "calendar.txt",
-        "calendar_dates": "calendar_dates.txt",
-        "shapes": "shapes.txt",
-        "agency": "agency.txt"
+    # CREATE TABLE esplicite con schema corrispondente alle Room entities dell'app
+    print("\nCreazione schema tabelle...")
+    
+    # Tabella routes - Schema ESATTO da RouteEntity
+    cursor.execute("""
+        CREATE TABLE routes (
+            route_id TEXT PRIMARY KEY NOT NULL,
+            agency_id TEXT,
+            route_short_name TEXT NOT NULL,
+            route_long_name TEXT NOT NULL,
+            route_type TEXT,
+            route_color TEXT,
+            route_text_color TEXT
+        )
+    """)
+    print("✓ Tabella routes creata")
+    
+    # Tabella stops - Schema da StopEntity
+    cursor.execute("""
+        CREATE TABLE stops (
+            stop_id TEXT PRIMARY KEY NOT NULL,
+            stop_code TEXT,
+            stop_name TEXT NOT NULL,
+            stop_desc TEXT,
+            stop_lat TEXT NOT NULL,
+            stop_lon TEXT NOT NULL,
+            zone_id TEXT,
+            stop_url TEXT,
+            location_type TEXT,
+            parent_station TEXT,
+            stop_timezone TEXT,
+            wheelchair_boarding TEXT
+        )
+    """)
+    print("✓ Tabella stops creata")
+    
+    # Tabella trips - Schema da TripEntity
+    cursor.execute("""
+        CREATE TABLE trips (
+            trip_id TEXT PRIMARY KEY NOT NULL,
+            route_id TEXT NOT NULL,
+            service_id TEXT NOT NULL,
+            trip_headsign TEXT,
+            trip_short_name TEXT,
+            direction_id TEXT,
+            block_id TEXT,
+            shape_id TEXT,
+            wheelchair_accessible TEXT,
+            bikes_allowed TEXT
+        )
+    """)
+    print("✓ Tabella trips creata")
+    
+    # Tabella stop_times - Chiave composta (trip_id, stop_sequence)
+    cursor.execute("""
+        CREATE TABLE stop_times (
+            trip_id TEXT NOT NULL,
+            arrival_time TEXT NOT NULL,
+            departure_time TEXT NOT NULL,
+            stop_id TEXT NOT NULL,
+            stop_sequence INTEGER NOT NULL,
+            stop_headsign TEXT,
+            pickup_type TEXT,
+            drop_off_type TEXT,
+            shape_dist_traveled TEXT,
+            timepoint TEXT,
+            PRIMARY KEY (trip_id, stop_sequence)
+        )
+    """)
+    print("✓ Tabella stop_times creata")
+    
+    # Tabella calendar - Schema da CalendarEntity (usa TEXT per i giorni, non INTEGER)
+    cursor.execute("""
+        CREATE TABLE calendar (
+            service_id TEXT PRIMARY KEY NOT NULL,
+            monday TEXT NOT NULL,
+            tuesday TEXT NOT NULL,
+            wednesday TEXT NOT NULL,
+            thursday TEXT NOT NULL,
+            friday TEXT NOT NULL,
+            saturday TEXT NOT NULL,
+            sunday TEXT NOT NULL,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL
+        )
+    """)
+    print("✓ Tabella calendar creata")
+    
+    # Tabella calendar_dates - Chiave composta (usa TEXT per exception_type)
+    cursor.execute("""
+        CREATE TABLE calendar_dates (
+            service_id TEXT NOT NULL,
+            date TEXT NOT NULL,
+            exception_type TEXT NOT NULL,
+            PRIMARY KEY (service_id, date)
+        )
+    """)
+    print("✓ Tabella calendar_dates creata")
+    
+    # Tabella shapes - Chiave composta (usa TEXT per lat/lon, non REAL, per preservare precisione)
+    cursor.execute("""
+        CREATE TABLE shapes (
+            shape_id TEXT NOT NULL,
+            shape_pt_lat TEXT NOT NULL,
+            shape_pt_lon TEXT NOT NULL,
+            shape_pt_sequence INTEGER NOT NULL,
+            shape_dist_traveled TEXT,
+            PRIMARY KEY (shape_id, shape_pt_sequence)
+        )
+    """)
+    print("✓ Tabella shapes creata")
+    
+    # Tabella agency (solo campi definiti in AgencyEntity, non agency_fare_url o agency_email)
+    cursor.execute("""
+        CREATE TABLE agency (
+            agency_id TEXT PRIMARY KEY NOT NULL,
+            agency_name TEXT NOT NULL,
+            agency_url TEXT NOT NULL,
+            agency_timezone TEXT NOT NULL,
+            agency_lang TEXT,
+            agency_phone TEXT
+        )
+    """)
+    print("✓ Tabella agency creata")
+    
+    conn.commit()
+    
+    # Importa dati dai CSV nelle tabelle con schema definito
+    print("\n" + "=" * 60)
+    print("STEP 2b: Importazione Dati GTFS")
+    print("=" * 60)
+    
+    # Mappa: nome_tabella -> (file_csv, colonne_da_importare)
+    imports = {
+        "routes": ("routes.txt", ["route_id", "agency_id", "route_short_name", "route_long_name", "route_type", "route_color", "route_text_color"]),
+        "stops": ("stops.txt", ["stop_id", "stop_code", "stop_name", "stop_desc", "stop_lat", "stop_lon", "zone_id", "stop_url", "location_type", "parent_station", "stop_timezone", "wheelchair_boarding"]),
+        "trips": ("trips.txt", ["trip_id", "route_id", "service_id", "trip_headsign", "trip_short_name", "direction_id", "block_id", "shape_id", "wheelchair_accessible", "bikes_allowed"]),
+        "stop_times": ("stop_times.txt", ["trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence", "stop_headsign", "pickup_type", "drop_off_type", "shape_dist_traveled", "timepoint"]),
+        "calendar": ("calendar.txt", ["service_id", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "start_date", "end_date"]),
+        "calendar_dates": ("calendar_dates.txt", ["service_id", "date", "exception_type"]),
+        "shapes": ("shapes.txt", ["shape_id", "shape_pt_lat", "shape_pt_lon", "shape_pt_sequence", "shape_dist_traveled"]),
+        "agency": ("agency.txt", ["agency_id", "agency_name", "agency_url", "agency_timezone", "agency_lang", "agency_phone"])
     }
     
-    # Importa ogni file CSV come tabella
-    for table_name, file_name in files_to_import.items():
+    for table_name, (file_name, columns) in imports.items():
         file_path = os.path.join("temp_gtfs", file_name)
         
         if not os.path.exists(file_path):
@@ -100,16 +231,27 @@ def create_database():
         print(f"\nImportazione {table_name}...", end=" ")
         
         try:
-            # Leggi in chunk per gestire file grandi
-            # dtype=str previene errori di conversione tipo
             row_count = 0
+            # Leggi CSV e seleziona solo le colonne che ci servono
             for chunk in pd.read_csv(file_path, dtype=str, chunksize=50000):
-                chunk.to_sql(table_name, conn, if_exists="append", index=False)
+                # Seleziona solo le colonne che esistono sia nel CSV che nello schema
+                available_cols = [col for col in columns if col in chunk.columns]
+                missing_cols = [col for col in columns if col not in chunk.columns]
+                
+                if missing_cols:
+                    print(f"\n⚠ Colonne mancanti nel CSV: {missing_cols}")
+                
+                data = chunk[available_cols]
+                
+                # Inserisci dati nella tabella con schema predefinito
+                data.to_sql(table_name, conn, if_exists="append", index=False)
                 row_count += len(chunk)
             
             print(f"✓ {row_count:,} righe")
         except Exception as e:
             print(f"✗ Errore: {e}")
+            import traceback
+            traceback.print_exc()
             conn.close()
             exit(1)
     
@@ -122,27 +264,17 @@ def create_database():
     
     indices = [
         # Indici per stop_times (query più frequenti)
+        # trip_id e stop_sequence sono già in PRIMARY KEY, ma stop_id serve per lookup
         ("idx_stop_times_stop_id", "stop_times", "stop_id"),
-        ("idx_stop_times_trip_id", "stop_times", "trip_id"),
-        ("idx_stop_times_sequence", "stop_times", "stop_sequence"),
         
-        # Indici per trips
+        # Indici per trips (route_id e service_id per JOIN)
         ("idx_trips_route_id", "trips", "route_id"),
         ("idx_trips_service_id", "trips", "service_id"),
-        ("idx_trips_trip_id", "trips", "trip_id"),
         
-        # Indici per routes
-        ("idx_routes_id", "routes", "route_id"),
-        
-        # Indici per stops
-        ("idx_stops_id", "stops", "stop_id"),
-        
-        # Indici per shapes (mappe)
+        # Indici per shapes (mappe) - shape_id e sequence sono in PRIMARY KEY, ma serve indice separato per shape_id
         ("idx_shapes_id", "shapes", "shape_id"),
-        ("idx_shapes_sequence", "shapes", "shape_pt_sequence"),
         
-        # Indici per calendar
-        ("idx_calendar_service", "calendar", "service_id"),
+        # Indici per calendar_dates (service_id e date sono in PRIMARY KEY, ma servono lookup separati)
         ("idx_calendar_dates_service", "calendar_dates", "service_id"),
         ("idx_calendar_dates_date", "calendar_dates", "date")
     ]
