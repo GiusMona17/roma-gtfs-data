@@ -241,7 +241,32 @@ def create_database():
                 if missing_cols:
                     print(f"\n⚠ Colonne mancanti nel CSV: {missing_cols}")
                 
-                data = chunk[available_cols]
+                data = chunk[available_cols].copy()
+                
+                # Pulizia dati: gestisci valori NULL per colonne NOT NULL
+                if table_name == "routes":
+                    # Se route_long_name è vuoto, usa route_short_name come fallback
+                    data['route_long_name'] = data['route_long_name'].fillna(data['route_short_name'])
+                    # Se route_short_name è vuoto, usa route_id come fallback
+                    data['route_short_name'] = data['route_short_name'].fillna(data['route_id'])
+                
+                elif table_name == "stops":
+                    # stop_name, stop_lat, stop_lon sono obbligatori
+                    data['stop_name'] = data['stop_name'].fillna('Unknown Stop')
+                    data['stop_lat'] = data['stop_lat'].fillna('0.0')
+                    data['stop_lon'] = data['stop_lon'].fillna('0.0')
+                
+                elif table_name == "trips":
+                    # route_id e service_id sono obbligatori ma dovrebbero sempre esserci
+                    pass
+                
+                elif table_name == "stop_times":
+                    # arrival_time, departure_time, stop_id sono obbligatori
+                    pass
+                
+                elif table_name == "calendar":
+                    # Tutti i campi dovrebbero essere presenti
+                    pass
                 
                 # Inserisci dati nella tabella con schema predefinito
                 data.to_sql(table_name, conn, if_exists="append", index=False)
