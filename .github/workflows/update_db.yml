@@ -92,6 +92,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
+          # Elimina release esistente se presente (utile per re-run falliti)
+          gh release delete "db-${{ env.BUILD_DATE }}" --yes 2>/dev/null || true
+          
           gh release create "db-${{ env.BUILD_DATE }}" \
             output/rome_gtfs.db.gz \
             output/manifest.json \
