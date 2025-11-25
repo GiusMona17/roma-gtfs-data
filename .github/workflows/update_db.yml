@@ -90,7 +90,7 @@ jobs:
       - name: Create dated release
         if: steps.check_changes.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           gh release create "db-${{ env.BUILD_DATE }}" \
             output/rome_gtfs.db.gz \
@@ -141,7 +141,7 @@ jobs:
       - name: Create latest release (moving tag)
         if: steps.check_changes.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           # Elimina release esistente se presente
           gh release delete latest-db --yes --cleanup-tag 2>/dev/null || true
