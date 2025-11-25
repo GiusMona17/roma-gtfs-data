@@ -39,6 +39,38 @@ jobs:
         run: |
           python scripts/build_db.py
       
+      - name: Verify Database Integrity
+        run: |
+          # Verifica che il database esista e contenga tabelle
+          if [ ! -f output/rome_gtfs.db ]; then
+            echo "❌ ERRORE: Database non trovato!"
+            exit 1
+          fi
+          
+          # Verifica che non sia vuoto
+          SIZE=$(stat -f%z output/rome_gtfs.db 2>/dev/null || stat -c%s output/rome_gtfs.db)
+          if [ "$SIZE" -lt 100000 ]; then  # Meno di 100KB = probabilmente vuoto
+            echo "❌ ERRORE: Database troppo piccolo ($SIZE bytes)!"
+            exit 1
+          fi
+          
+          # Verifica che contenga la tabella routes
+          TABLES=$(sqlite3 output/rome_gtfs.db "SELECT name FROM sqlite_master WHERE type='table';")
+          if ! echo "$TABLES" | grep -q "routes"; then
+            echo "❌ ERRORE: Tabella 'routes' non trovata nel database!"
+            echo "Tabelle trovate: $TABLES"
+            exit 1
+          fi
+          
+          # Conta righe in routes
+          ROUTE_COUNT=$(sqlite3 output/rome_gtfs.db "SELECT COUNT(*) FROM routes;")
+          if [ "$ROUTE_COUNT" -lt 10 ]; then
+            echo "❌ ERRORE: Troppo poche route ($ROUTE_COUNT), database probabilmente incompleto!"
+            exit 1
+          fi
+          
+          echo "✅ Database valido: $SIZE bytes, $ROUTE_COUNT routes"
+      
       - name: Check if database changed
         id: check_changes
         run: |
