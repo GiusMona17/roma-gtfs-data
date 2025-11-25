@@ -13,7 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     
     permissions:
-      contents: write  # Necessario per creare release
+      contents: write  # Necessario per creare release e tag
+      id-token: write  # Necessario per autenticazione
     
     steps:
       - name: Checkout repository
