@@ -1,8 +1,3 @@
-"""
-GTFS Database Builder for Roma Mobilità
-Scarica i dati GTFS, crea un database SQLite ottimizzato e genera metadata per l'aggiornamento.
-"""
-
 import os
 import sqlite3
 import pandas as pd
@@ -11,12 +6,15 @@ import requests
 import shutil
 import hashlib
 import json
+import time
 from datetime import datetime
 
 # Configurazione
 GTFS_URL = "https://romamobilita.it/sites/default/files/rome_static_gtfs.zip"
 DB_NAME = "rome_gtfs.db"
 OUTPUT_DIR = "output"
+MAX_RETRIES = 3
+RETRY_DELAY = 10  # secondi
 
 def calculate_md5(filepath):
     """Calcola hash MD5 di un file per rilevare cambiamenti"""
@@ -27,37 +25,45 @@ def calculate_md5(filepath):
     return hash_md5.hexdigest()
 
 def download_and_extract():
-    """Scarica e estrae il file GTFS da Roma Mobilità"""
+    """Scarica e estrae il file GTFS da Roma Mobilità con retry logic"""
     print("=" * 60)
     print("STEP 1: Download GTFS da Roma Mobilità")
     print("=" * 60)
-    
-    try:
-        print(f"Scaricamento da: {GTFS_URL}")
-        response = requests.get(GTFS_URL, timeout=180)
-        response.raise_for_status()
-        
-        with open("gtfs.zip", "wb") as f:
-            f.write(response.content)
-        
-        print(f"✓ Scaricati {len(response.content) / (1024*1024):.2f} MB")
-    except Exception as e:
-        print(f"✗ Errore download: {e}")
-        exit(1)
+
+    # Retry logic per download
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            print(f"\nTentativo {attempt}/{MAX_RETRIES}: Scaricamento da {GTFS_URL}")
+            response = requests.get(GTFS_URL, timeout=180)
+            response.raise_for_status()
+
+            with open("gtfs.zip", "wb") as f:
+                f.write(response.content)
+
+            print(f"✓ Scaricati {len(response.content) / (1024*1024):.2f} MB")
+            break  # Download riuscito, esci dal loop
+            
+        except Exception as e:
+            print(f"✗ Errore download (tentativo {attempt}/{MAX_RETRIES}): {e}")
+            
+            if attempt < MAX_RETRIES:
+                wait_time = RETRY_DELAY * attempt  # Backoff esponenziale
+                print(f"⏳ Attendo {wait_time}s prima di riprovare...")
+                time.sleep(wait_time)
+            else:
+                print(f"❌ FALLIMENTO DEFINITIVO dopo {MAX_RETRIES} tentativi")
+                exit(1)
     
     print("\nEstrazione file ZIP...")
     try:
         with zipfile.ZipFile("gtfs.zip", "r") as z:
             z.extractall("temp_gtfs")
-        
+
         files = os.listdir("temp_gtfs")
         print(f"✓ Estratti {len(files)} file: {', '.join(files)}")
     except Exception as e:
         print(f"✗ Errore estrazione: {e}")
         exit(1)
-
-def create_database():
-    """Crea il database SQLite con tabelle e indici ottimizzati"""
     print("\n" + "=" * 60)
     print("STEP 2: Creazione Database SQLite")
     print("=" * 60)
@@ -392,9 +398,9 @@ def cleanup():
 def main():
     """Entry point principale"""
     print("\n")
-    print("╔" + "═" * 58 + "╗")
+    print("=" + "=" * 58 + "=")
     print("║" + " " * 10 + "GTFS DATABASE BUILDER - ROMA MOBILITÀ" + " " * 11 + "║")
-    print("╚" + "═" * 58 + "╝")
+    print("=" + "=" * 58 + "=")
     print()
     
     try:
@@ -405,9 +411,9 @@ def main():
         cleanup()
         
         # Riepilogo finale
-        print("\n" + "╔" + "═" * 58 + "╗")
+        print("\n" + "=" + "=" * 58 + "=")
         print("║" + " " * 20 + "BUILD COMPLETATA" + " " * 22 + "║")
-        print("╚" + "═" * 58 + "╝")
+        print("=" + "=" * 58 + "=")
         print()
         print(f"📦 Database: {db_path}")
         print(f"📊 Dimensione: {metadata['size_mb']} MB")
