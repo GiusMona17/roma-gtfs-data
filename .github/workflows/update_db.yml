@@ -89,48 +89,43 @@ jobs:
       
       - name: Create dated release
         if: steps.check_changes.outputs.changed == 'true'
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            output/rome_gtfs.db.gz
-            output/manifest.json
-          tag_name: db-${{ env.BUILD_DATE }}
-          name: 📦 GTFS Database - ${{ env.BUILD_DATE }}
-          body: |
-            ## 🚍 Database GTFS Roma Mobilità
-            
-            **Data build:** ${{ env.BUILD_DATE }}
-            **Hash MD5:** `${{ steps.check_changes.outputs.new_hash }}`
-            
-            ### 📥 Download
-            - **Database compresso:** `rome_gtfs.db.gz` (~10-15 MB)
-            - **Metadata:** `manifest.json` (info versione e hash)
-            
-            ### 📊 Contenuto
-            Database SQLite pre-indicizzato contenente:
-            - Fermate (stops)
-            - Linee (routes)
-            - Percorsi (trips)
-            - Orari (stop_times)
-            - Calendari (calendar, calendar_dates)
-            - Tracciati geografici (shapes)
-            
-            ### 🔧 Utilizzo
-            ```bash
-            # Scarica e decomprimi
-            wget https://github.com/${{ github.repository }}/releases/download/db-${{ env.BUILD_DATE }}/rome_gtfs.db.gz
-            gunzip rome_gtfs.db.gz
-            
-            # Usa con SQLite
-            sqlite3 rome_gtfs.db "SELECT * FROM routes LIMIT 5;"
-            ```
-            
-            ---
-            *Generato automaticamente da GitHub Actions*
-          prerelease: false
-          draft: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "db-${{ env.BUILD_DATE }}" \
+            output/rome_gtfs.db.gz \
+            output/manifest.json \
+            --title "📦 GTFS Database - ${{ env.BUILD_DATE }}" \
+            --notes "## 🚍 Database GTFS Roma Mobilità
+          
+          **Data build:** ${{ env.BUILD_DATE }}
+          **Hash MD5:** \`${{ steps.check_changes.outputs.new_hash }}\`
+          
+          ### 📥 Download
+          - **Database compresso:** \`rome_gtfs.db.gz\` (~10-15 MB)
+          - **Metadata:** \`manifest.json\` (info versione e hash)
+          
+          ### 📊 Contenuto
+          Database SQLite pre-indicizzato contenente:
+          - Fermate (stops)
+          - Linee (routes)
+          - Percorsi (trips)
+          - Orari (stop_times)
+          - Calendari (calendar, calendar_dates)
+          - Tracciati geografici (shapes)
+          
+          ### 🔧 Utilizzo
+          \`\`\`bash
+          # Scarica e decomprimi
+          wget https://github.com/${{ github.repository }}/releases/download/db-${{ env.BUILD_DATE }}/rome_gtfs.db.gz
+          gunzip rome_gtfs.db.gz
+          
+          # Usa con SQLite
+          sqlite3 rome_gtfs.db 'SELECT * FROM routes LIMIT 5;'
+          \`\`\`
+          
+          ---
+          *Generato automaticamente da GitHub Actions*"
       
       - name: Update latest tag
         if: steps.check_changes.outputs.changed == 'true'
@@ -145,32 +140,31 @@ jobs:
       
       - name: Create latest release (moving tag)
         if: steps.check_changes.outputs.changed == 'true'
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            output/rome_gtfs.db.gz
-            output/manifest.json
-          tag_name: latest-db
-          name: 📦 Latest GTFS Database
-          body: |
-            ## 🚍 Ultima Versione Database GTFS
-            
-            Questo è sempre l'ultimo database generato.
-            
-            **Ultimo aggiornamento:** ${{ env.BUILD_DATE }}
-            **Hash MD5:** `${{ steps.check_changes.outputs.new_hash }}`
-            
-            ### 🔗 Link Stabili
-            Usa questi URL nell'app per scaricare sempre l'ultima versione:
-            - Database: `https://github.com/${{ github.repository }}/releases/download/latest-db/rome_gtfs.db.gz`
-            - Manifest: `https://github.com/${{ github.repository }}/releases/download/latest-db/manifest.json`
-            
-            ---
-            *Aggiornato automaticamente ogni giorno alle 04:00 UTC*
-          prerelease: false
-          draft: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Elimina release esistente se presente
+          gh release delete latest-db --yes --cleanup-tag 2>/dev/null || true
+          
+          # Crea nuova release
+          gh release create "latest-db" \
+            output/rome_gtfs.db.gz \
+            output/manifest.json \
+            --title "📦 Latest GTFS Database" \
+            --notes "## 🚍 Ultima Versione Database GTFS
+          
+          Questo è sempre l'ultimo database generato.
+          
+          **Ultimo aggiornamento:** ${{ env.BUILD_DATE }}
+          **Hash MD5:** \`${{ steps.check_changes.outputs.new_hash }}\`
+          
+          ### 🔗 Link Stabili
+          Usa questi URL nell'app per scaricare sempre l'ultima versione:
+          - Database: \`https://github.com/${{ github.repository }}/releases/download/latest-db/rome_gtfs.db.gz\`
+          - Manifest: \`https://github.com/${{ github.repository }}/releases/download/latest-db/manifest.json\`
+          
+          ---
+          *Aggiornato automaticamente ogni giorno alle 04:00 UTC*"
       
       - name: Summary
         if: steps.check_changes.outputs.changed == 'true'
