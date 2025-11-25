@@ -34,7 +34,7 @@ def download_and_extract():
     
     try:
         print(f"Scaricamento da: {GTFS_URL}")
-        response = requests.get(GTFS_URL, timeout=60)
+        response = requests.get(GTFS_URL, timeout=180)
         response.raise_for_status()
         
         with open("gtfs.zip", "wb") as f:
