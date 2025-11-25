@@ -27,7 +27,7 @@ jobs:
       
       - name: Install dependencies
         run: |
-          pip install pandas requests
+          sudo apt-get update && sudo apt-get install -y sqlite3 && pip install pandas requests
       
       - name: Get current date
         id: date
@@ -220,3 +220,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Il database GTFS non è cambiato rispetto alla versione precedente." >> $GITHUB_STEP_SUMMARY
           echo "Nessuna nuova release creata." >> $GITHUB_STEP_SUMMARY
+
