@@ -1,3 +1,8 @@
+"""
+GTFS Database Builder for Roma Mobilità
+Scarica i dati GTFS, crea un database SQLite ottimizzato e genera metadata per l'aggiornamento.
+"""
+
 import os
 import sqlite3
 import pandas as pd
@@ -6,15 +11,12 @@ import requests
 import shutil
 import hashlib
 import json
-import time
 from datetime import datetime
 
 # Configurazione
 GTFS_URL = "https://romamobilita.it/sites/default/files/rome_static_gtfs.zip"
 DB_NAME = "rome_gtfs.db"
 OUTPUT_DIR = "output"
-MAX_RETRIES = 3
-RETRY_DELAY = 10  # secondi
 
 def calculate_md5(filepath):
     """Calcola hash MD5 di un file per rilevare cambiamenti"""
@@ -25,45 +27,42 @@ def calculate_md5(filepath):
     return hash_md5.hexdigest()
 
 def download_and_extract():
-    """Scarica e estrae il file GTFS da Roma Mobilità con retry logic"""
+    """Scarica e estrae il file GTFS da Roma Mobilità"""
     print("=" * 60)
     print("STEP 1: Download GTFS da Roma Mobilità")
     print("=" * 60)
-
-    # Retry logic per download
-    for attempt in range(1, MAX_RETRIES + 1):
+    
+    # Check se il file esiste già (per testing locale)
+    if os.path.exists("gtfs.zip"):
+        print(f"✓ Usando file GTFS locale esistente")
+        print(f"  Dimensione: {os.path.getsize('gtfs.zip') / (1024*1024):.2f} MB")
+    else:
         try:
-            print(f"\nTentativo {attempt}/{MAX_RETRIES}: Scaricamento da {GTFS_URL}")
+            print(f"Scaricamento da: {GTFS_URL}")
             response = requests.get(GTFS_URL, timeout=180)
             response.raise_for_status()
-
+            
             with open("gtfs.zip", "wb") as f:
                 f.write(response.content)
-
+            
             print(f"✓ Scaricati {len(response.content) / (1024*1024):.2f} MB")
-            break  # Download riuscito, esci dal loop
-            
         except Exception as e:
-            print(f"✗ Errore download (tentativo {attempt}/{MAX_RETRIES}): {e}")
-            
-            if attempt < MAX_RETRIES:
-                wait_time = RETRY_DELAY * attempt  # Backoff esponenziale
-                print(f"⏳ Attendo {wait_time}s prima di riprovare...")
-                time.sleep(wait_time)
-            else:
-                print(f"❌ FALLIMENTO DEFINITIVO dopo {MAX_RETRIES} tentativi")
-                exit(1)
+            print(f"✗ Errore download: {e}")
+            exit(1)
     
     print("\nEstrazione file ZIP...")
     try:
         with zipfile.ZipFile("gtfs.zip", "r") as z:
             z.extractall("temp_gtfs")
-
+        
         files = os.listdir("temp_gtfs")
         print(f"✓ Estratti {len(files)} file: {', '.join(files)}")
     except Exception as e:
         print(f"✗ Errore estrazione: {e}")
         exit(1)
+
+def create_database():
+    """Crea il database SQLite con tabelle e indici ottimizzati"""
     print("\n" + "=" * 60)
     print("STEP 2: Creazione Database SQLite")
     print("=" * 60)
@@ -275,7 +274,8 @@ def download_and_extract():
                     pass
                 
                 # Inserisci dati nella tabella con schema predefinito
-                data.to_sql(table_name, conn, if_exists="append", index=False)
+                # IMPORTANTE: if_exists="append" usa lo schema esistente dalla CREATE TABLE
+                data.to_sql(table_name, conn, if_exists="append", index=False, dtype='text')
                 row_count += len(chunk)
             
             print(f"✓ {row_count:,} righe")
@@ -398,9 +398,9 @@ def cleanup():
 def main():
     """Entry point principale"""
     print("\n")
-    print("=" + "=" * 58 + "=")
+    print("╔" + "═" * 58 + "╗")
     print("║" + " " * 10 + "GTFS DATABASE BUILDER - ROMA MOBILITÀ" + " " * 11 + "║")
-    print("=" + "=" * 58 + "=")
+    print("╚" + "═" * 58 + "╝")
     print()
     
     try:
@@ -411,9 +411,9 @@ def main():
         cleanup()
         
         # Riepilogo finale
-        print("\n" + "=" + "=" * 58 + "=")
+        print("\n" + "╔" + "═" * 58 + "╗")
         print("║" + " " * 20 + "BUILD COMPLETATA" + " " * 22 + "║")
-        print("=" + "=" * 58 + "=")
+        print("╚" + "═" * 58 + "╝")
         print()
         print(f"📦 Database: {db_path}")
         print(f"📊 Dimensione: {metadata['size_mb']} MB")
