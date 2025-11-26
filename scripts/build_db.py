@@ -82,6 +82,22 @@ def create_database():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
+    # Crea tabella di metadata Room (richiesta da Room per validazione schema)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS room_master_table (
+            id INTEGER PRIMARY KEY,
+            identity_hash TEXT
+        )
+    """)
+    # Hash dell'identità del database (versione 1, come definito in GtfsDatabase.kt)
+    # Questo hash deve corrispondere a quello generato da Room dalle Entity
+    # Per ora usiamo un valore placeholder che Room aggiornerà al primo accesso
+    cursor.execute("""
+        INSERT INTO room_master_table (id, identity_hash) 
+        VALUES (42, 'GTFS_DATABASE_V1_PLACEHOLDER')
+    """)
+    print("✓ Tabella room_master_table creata")
+    
     # CREATE TABLE esplicite con schema corrispondente alle Room entities dell'app
     print("\nCreazione schema tabelle...")
     

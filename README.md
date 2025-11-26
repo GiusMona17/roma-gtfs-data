@@ -31,15 +31,15 @@ Se i dati GTFS non sono cambiati, non viene creata una nuova release.
 Usa questi URL nell'app per scaricare sempre l'ultima versione:
 
 ```
-https://github.com/GiusMona17/roma-gtfs-data/releases/download/latest-db/rome_gtfs.db.gz
-https://github.com/GiusMona17/roma-gtfs-data/releases/download/latest-db/manifest.json
+https://github.com/YOUR_USERNAME/roma-gtfs-data/releases/download/latest-db/rome_gtfs.db.gz
+https://github.com/YOUR_USERNAME/roma-gtfs-data/releases/download/latest-db/manifest.json
 ```
 
 ### Versione specifica
 Ogni build crea un release con tag data (es. `db-2025-11-24`):
 
 ```
-https://github.com/GiusMona17/roma-gtfs-data/releases/download/db-2025-11-24/rome_gtfs.db.gz
+https://github.com/YOUR_USERNAME/roma-gtfs-data/releases/download/db-2025-11-24/rome_gtfs.db.gz
 ```
 
 ## 🛠️ Build Locale
@@ -60,7 +60,7 @@ python scripts/build_db.py
 
 ```bash
 # Scarica e decomprimi
-wget https://github.com/GiusMona17/roma-gtfs-data/releases/download/latest-db/rome_gtfs.db.gz
+wget https://github.com/YOUR_USERNAME/roma-gtfs-data/releases/download/latest-db/rome_gtfs.db.gz
 gunzip rome_gtfs.db.gz
 
 # Query di esempio
