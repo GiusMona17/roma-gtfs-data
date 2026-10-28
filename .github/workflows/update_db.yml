@@ -201,6 +201,14 @@ jobs:
           ---
           *Aggiornato automaticamente ogni giorno alle 04:00 UTC*"
       
+      - name: Prune old dated releases
+        if: steps.check_changes.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          # Keep only the newest 14 db-* releases (each ~130 MB); latest-db is untouched
+          gh release list --repo "${{ github.repository }}" --limit 1000 --json tagName             -q '[.[].tagName | select(startswith("db-"))] | sort | reverse | .[14:] | .[]'             | xargs -r -n1 gh release delete --repo "${{ github.repository }}" --yes --cleanup-tag
+      
       - name: Summary
         if: steps.check_changes.outputs.changed == 'true'
         run: |
