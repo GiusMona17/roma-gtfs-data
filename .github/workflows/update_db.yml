@@ -209,6 +209,20 @@ jobs:
           # Keep only the newest 14 db-* releases (each ~130 MB); latest-db is untouched
           gh release list --repo "${{ github.repository }}" --limit 1000 --json tagName             -q '[.[].tagName | select(startswith("db-"))] | sort | reverse | .[14:] | .[]'             | xargs -r -n1 gh release delete --repo "${{ github.repository }}" --yes --cleanup-tag
       
+      - name: Load GTFS into Supabase
+        # Manual runs always load, so a dispatch can refresh Supabase even when the feed is unchanged
+        if: steps.check_changes.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          # Secrets are not allowed in step `if:`, so the check lives here
+          if [ -z "$DATABASE_URL" ]; then
+            echo "SUPABASE_DB_URL non impostato, salto il caricamento su Supabase"
+            exit 0
+          fi
+          pip install "psycopg[binary]>=3" requests
+          python scripts/load_supabase.py
+
       - name: Summary
         if: steps.check_changes.outputs.changed == 'true'
         run: |

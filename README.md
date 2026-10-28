@@ -25,6 +25,16 @@ Il database viene aggiornato **automaticamente ogni giorno alle 04:00 UTC** tram
 
 Se i dati GTFS non sono cambiati, non viene creata una nuova release.
 
+## ☁️ Caricamento su Supabase (opzionale)
+
+Quando i dati cambiano (e a ogni esecuzione manuale), lo step `Load GTFS into Supabase` carica il feed nello schema Postgres `gtfs`
+(`scripts/load_supabase.py`, con swap atomico degli schemi). Richiede:
+
+- Secret del repository `SUPABASE_DB_URL`: la stringa **Session pooler** di Supabase (Dashboard → Connect),
+  nel formato `postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`.
+- La migrazione `supabase/migrations/0001_gtfs_schema.sql` (repo principale) già applicata al progetto.
+- Senza il secret lo step viene saltato senza errori.
+
 ## 📥 Download
 
 ### Ultima versione (latest)
