@@ -185,6 +185,7 @@ class Feed:
     stop_times: dict[str, list[StopTime]]
     calendar: list[Mapping[str, str]]
     calendar_dates: list[Mapping[str, str]]
+    shapes: list[Mapping[str, str]]
 
 
 @dataclass(frozen=True)
@@ -193,6 +194,7 @@ class Tables:
     stops: list[tuple]
     patterns: Patterns
     service_dates: list[tuple]
+    shapes: list[tuple]
 
 
 def _csv_rows(zf: zipfile.ZipFile, name: str) -> Iterator[Mapping[str, str]]:
@@ -224,6 +226,7 @@ def read_feed(zip_path: str) -> Feed:
             stop_times=_group_stop_times(_csv_rows(zf, "stop_times.txt")),
             calendar=list(_csv_rows(zf, "calendar.txt")),
             calendar_dates=list(_csv_rows(zf, "calendar_dates.txt")),
+            shapes=list(_csv_rows(zf, "shapes.txt")),
         )
 
 
@@ -252,12 +255,23 @@ def _route_row(route: Mapping[str, str]) -> tuple:
     )
 
 
+def _shape_row(point: Mapping[str, str]) -> tuple:
+    # shape_id is stripped like trips.shape_id, so the two join on equal text.
+    return (
+        point["shape_id"].strip(),
+        int(point["shape_pt_sequence"]),
+        float(point["shape_pt_lat"]),
+        float(point["shape_pt_lon"]),
+    )
+
+
 def build_tables(feed: Feed) -> Tables:
     return Tables(
         routes=[_route_row(route) for route in feed.routes],
         stops=[row for row in map(_stop_row, feed.stops) if row is not None],
         patterns=build_patterns(feed.trips, feed.stop_times),
         service_dates=sorted(expand_service_dates(feed.calendar, feed.calendar_dates)),
+        shapes=[_shape_row(point) for point in feed.shapes],
     )
 
 
@@ -290,7 +304,9 @@ def resolve_source(local_path: str | None, workdir: str) -> tuple[str, str]:
 # Staging DDL mirrors supabase/migrations/0001_gtfs_schema.sql. Keep them in sync.
 # Indexes are created after COPY (faster bulk load); they are in _index_ddl().
 def _table_ddl(schema: str) -> list[str]:
-    tables = ("routes", "stops", "patterns", "pattern_stops", "trips", "service_dates", "feed_info")
+    tables = (
+        "routes", "stops", "patterns", "pattern_stops", "trips", "service_dates", "feed_info", "shapes",
+    )
     statements = [
         f"""create table {schema}.routes (
             route_id text primary key, short_name text, long_name text,
@@ -315,6 +331,10 @@ def _table_ddl(schema: str) -> list[str]:
             primary key (service_date, service_id))""",
         f"""create table {schema}.feed_info (
             version text primary key, loaded_at timestamptz not null default now())""",
+        f"""create table {schema}.shapes (
+            shape_id text not null, seq integer not null,
+            lat double precision not null, lon double precision not null,
+            primary key (shape_id, seq))""",
     ]
     statements += [f"alter table {schema}.{t} enable row level security" for t in tables]
     statements.append(f"revoke all on all tables in schema {schema} from anon, authenticated")
@@ -329,6 +349,7 @@ def _index_ddl(schema: str) -> list[str]:
         "((public.immutable_unaccent(lower(name))) extensions.gin_trgm_ops)",
         f"create index pattern_stops_stop_idx on {schema}.pattern_stops (stop_id, pattern_id)",
         f"create index trips_pattern_idx on {schema}.trips (pattern_id)",
+        f"create index patterns_route_idx on {schema}.patterns (route_id)",
     ]
 
 
@@ -348,6 +369,7 @@ PATTERN_COLS = ("pattern_id", "route_id", "direction_id", "headsign", "shape_id"
 PATTERN_STOP_COLS = ("pattern_id", "seq", "stop_id", "arr_offset", "dep_offset")
 TRIP_COLS = ("trip_id", "pattern_id", "service_id", "start_sec")
 SERVICE_COLS = ("service_date", "service_id")
+SHAPE_COLS = ("shape_id", "seq", "lat", "lon")
 
 
 def _copy(cur, table: str, columns: Sequence[str], rows: Iterable[tuple]) -> int:
@@ -379,6 +401,7 @@ def load_database(db_url: str, tables: Tables, version: str) -> dict[str, int]:
         ("pattern_stops", PATTERN_STOP_COLS, tables.patterns.pattern_stops),
         ("trips", TRIP_COLS, tables.patterns.trips),
         ("service_dates", SERVICE_COLS, tables.service_dates),
+        ("shapes", SHAPE_COLS, tables.shapes),
     )
     counts: dict[str, int] = {}
     # psycopg commits on normal exit and rolls back on an exception.

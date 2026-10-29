@@ -223,6 +223,40 @@ jobs:
           pip install "psycopg[binary]>=3" requests
           python scripts/load_supabase.py
 
+      - name: Keep Supabase active
+        # Runs on every execution (scheduled and manual), even when the feed is unchanged,
+        # so the free-tier Supabase project is not paused after 7 days of inactivity
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          # Same guard as the load step: secrets are not allowed in step `if:`
+          if [ -z "$DATABASE_URL" ]; then
+            echo "SUPABASE_DB_URL non impostato, salto il keep-alive di Supabase"
+            exit 0
+          fi
+          # Installed here because the load step above is skipped when the feed is unchanged
+          if ! pip install -q "psycopg[binary]>=3"; then
+            echo "::warning::Impossibile installare psycopg, keep-alive Supabase saltato"
+            exit 0
+          fi
+          python - <<'EOF'
+          import os
+
+          # Never print DATABASE_URL or the raw exception message: libpq errors can echo parts of the DSN
+          try:
+              import psycopg
+
+              with psycopg.connect(os.environ["DATABASE_URL"], connect_timeout=15) as conn, conn.cursor() as cur:
+                  cur.execute("select version, loaded_at from gtfs.feed_info order by loaded_at desc limit 1")
+                  row = cur.fetchone()
+              if row:
+                  print(f"Supabase keep-alive OK: version={row[0]} loaded_at={row[1]}")
+              else:
+                  print("Supabase keep-alive OK: gtfs.feed_info is empty")
+          except Exception as exc:
+              print(f"::warning::Supabase keep-alive failed ({type(exc).__name__}), workflow not interrupted")
+          EOF
+
       - name: Summary
         if: steps.check_changes.outputs.changed == 'true'
         run: |

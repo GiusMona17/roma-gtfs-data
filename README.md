@@ -34,6 +34,8 @@ Quando i dati cambiano (e a ogni esecuzione manuale), lo step `Load GTFS into Su
   nel formato `postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`.
 - La migrazione `supabase/migrations/0001_gtfs_schema.sql` (repo principale) già applicata al progetto.
 - Senza il secret lo step viene saltato senza errori.
+- Lo step `Keep Supabase active` gira a **ogni** esecuzione (anche senza cambiamenti) e fa una query di lettura leggera su `gtfs.feed_info`, così il progetto Supabase free non va in pausa per inattività (dopo 7 giorni).
+- Se Supabase non è raggiungibile, lo step emette solo un warning e non fa fallire il workflow.
 
 ## 📥 Download
 

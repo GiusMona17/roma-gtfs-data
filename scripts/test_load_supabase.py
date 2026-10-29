@@ -6,7 +6,10 @@ Run from the repo root: python -m pytest satellite-repo-template/scripts/test_lo
 from datetime import date
 
 from load_supabase import (
+    Feed,
+    _shape_row,
     build_patterns,
+    build_tables,
     expand_service_dates,
     parse_gtfs_date,
     parse_gtfs_time,
@@ -122,3 +125,14 @@ def test_calendar_ranges_and_calendar_dates_add_and_remove():
 def test_calendar_dates_only_feed_without_calendar_file():
     active = expand_service_dates([], [{"service_id": "X", "date": "20260301", "exception_type": "1"}])
     assert active == {(date(2026, 3, 1), "X")}
+
+
+def test_shape_row_parses_and_strips_shape_id():
+    point = {"shape_id": " S1 ", "shape_pt_sequence": "3", "shape_pt_lat": "41.9028", "shape_pt_lon": "12.4964"}
+    assert _shape_row(point) == ("S1", 3, 41.9028, 12.4964)
+
+
+def test_build_tables_carries_shape_points():
+    shape = {"shape_id": "S1", "shape_pt_sequence": "1", "shape_pt_lat": "41.5", "shape_pt_lon": "12.5"}
+    feed = Feed(stops=[], routes=[], trips=[], stop_times={}, calendar=[], calendar_dates=[], shapes=[shape])
+    assert build_tables(feed).shapes == [("S1", 1, 41.5, 12.5)]
